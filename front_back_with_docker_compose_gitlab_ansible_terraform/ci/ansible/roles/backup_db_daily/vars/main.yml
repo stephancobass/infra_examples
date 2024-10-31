@@ -1,0 +1,7 @@
+DB_NAME: "{{ lookup('ansible.builtin.env', 'DB_NAME') }}"
+DB_USER: "{{ lookup('ansible.builtin.env', 'DB_USER') }}"
+DB_PASSWORD: "{{ lookup('ansible.builtin.env', 'DB_PASSWORD') }}"
+DB_HOST: "{{ lookup('ansible.builtin.env', 'DB_HOST') }}"
+DB_PORT: "{{ lookup('ansible.builtin.env', 'DB_PORT') }}"
+S3_BACKUP_BUCKET: "{{ lookup('ansible.builtin.env', 'S3_BACKUP_BUCKET') }}"
+BACKUP_TYPE: daily_db_backups

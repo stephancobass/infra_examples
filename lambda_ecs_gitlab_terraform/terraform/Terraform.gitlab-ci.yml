@@ -1,0 +1,255 @@
+image:
+  name: python:3.8
+  entrypoint: [""]
+
+variables:
+  # Terraform variebles
+  TF_STATE_NAME: $CI_ENVIRONMENT_NAME
+  TF_CACHE_KEY: default
+  TF_ROOT: ${CI_PROJECT_DIR}/terraform
+  TF_PLAN_CACHE: "plan.cache"
+  TF_HTTP_ADDRESS: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${TF_STATE_NAME}
+  TF_HTTP_LOCK_ADDRESS: ${TF_HTTP_ADDRESS}/lock
+  TF_HTTP_UNLOCK_ADDRESS: ${TF_HTTP_ADDRESS}/lock
+  TF_HTTP_PASSWORD: $GITLAB_ACCESS_TOKEN
+  TF_HTTP_USERNAME: $GITLAB_USERNAME
+  TF_VAR_gitlab_access_token: $GITLAB_ACCESS_TOKEN
+  TF_VAR_aws_access_key: $AWS_ACCESS_KEY_ID
+  TF_VAR_aws_secret_key: $AWS_SECRET_ACCESS_KEY
+  TF_VAR_aws_account_id: $AWS_ACCOUNT_ID
+  TF_VAR_environment: $CI_ENVIRONMENT_NAME
+  TF_VAR_aws_region: $AWS_DEFAULT_REGION
+  TF_VAR_aws_s3_bucket_name: $CI_ENVIRONMENT_NAME-snowflake-house
+  TF_VAR_default_telegram_timestamp_format: $DEFAULT_TELEGRAM_TIMESTAMP_FORMAT
+  TF_VAR_default_telegram_channels_list: $DEFAULT_TELEGRAM_CHANNELS_LIST
+  TF_VAR_telegram_secret_value: $TELEGRAM_SECRET_VALUE
+  TF_VAR_twitter_secret_value: $TWITTER_SECRET_VALUE
+  TF_VAR_twitter_fields: $TWITTER_FIELDS
+  TF_VAR_snowflake_account: $SNOWFLAKE_ACCOUNT
+  TF_VAR_snowflake_user: $SNOWFLAKE_USER
+  TF_VAR_snowflake_password: $SNOWFLAKE_PASSWORD
+  TF_VAR_snowflake_role: $SNOWFLAKE_ROLE
+  TF_VAR_snowflake_region: $SNOWFLAKE_REGION
+  TF_VAR_snowflake_warehouse: $SNOWFLAKE_WAREHOUSE
+  TF_VAR_snowflake_database: $SNOWFLAKE_DATABASE
+  TF_VAR_aws_iam_snowflake_si_policy: snowflake_house-$CI_ENVIRONMENT_NAME-snowflake_si_policy
+  TF_VAR_aws_iam_snowflake_si_role: snowflake_house-$CI_ENVIRONMENT_NAME-snowflake_si_role
+  TF_VAR_snowflake_storage_integration_name: $SNOWFLAKE_STORAGE_INTEGRATION_NAME
+  
+  # Variables of jobs
+  TELEGRAM_LAMBDA_PATH: telegram-s3-lambda/src
+  TWITTER_LAMBDA_PATH: twitter-s3-lambda/src
+  DBT_PATH: ${CI_PROJECT_DIR}/dbt
+
+
+cache:
+  key: "${TF_ROOT}"
+  paths:
+    - ${TF_ROOT}/.terraform/
+
+# Teamplate for building python apps like terraform, twitter and salesforce lambdas
+.terraform-init:
+  stage: terraform-plan
+  before_script:
+    - apt update
+    - apt install -y gnupg software-properties-common zip
+    - wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    - gpg --no-default-keyring --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg --fingerprint
+    - echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+    - apt update
+    - apt install -y terraform
+    - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - unzip awscliv2.zip > awscli_install.log
+    - ./aws/install
+    - cd "${TF_ROOT}"
+    - terraform init -input=false -reconfigure
+   
+  rules:
+    - if: $CI_COMMIT_BRANCH == "infrastructure" && $CI_PIPELINE_SOURCE == "push"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+    - if: $CI_PIPELINE_SOURCE == "merge_requeаst_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+      variables:
+        CI_ENVIRONMENT_NAME: "prod"
+    
+# Basic teamplate for building dbt image
+.docker-init:
+  stage: app-build
+  before_script:
+    - apt update
+    - apt install -y ca-certificates curl gnupg 
+    - mkdir -m 0755 -p /etc/apt/keyrings
+    - curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    - echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    - apt update
+    - apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - unzip awscliv2.zip > awscli_install.log
+    - ./aws/install
+
+# Basic teamplate for building python apps like terraform, twitter and salesforce lambdas
+.python-init:
+  stage: app-build
+  before_script:
+    - apt update
+    - apt install -y pip zip 
+    - pip install -r ${TF_ROOT}/py_requirements.txt
+    - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - unzip awscliv2.zip > awscli_install.log
+    - ./aws/install
+
+# Manual job for rebuild lambda layers
+.layers-build:
+  extends: .python-init
+  stage: app-build
+  script:
+    - 'pip install --platform manylinux1_x86_64 --only-binary=:all: pandas numpy pyarrow fastparquet -t data-compute-layer/python'
+    - pushd data-compute-layer
+    - zip -r python.zip python -x "python/__pycache__/*" -x "python/*dist-info/*" >> data-compute-layer.log && popd
+    - aws s3 cp data-compute-layer/python.zip s3://$TF_VAR_aws_s3_bucket_name/lambda-layers/data-compute-layer/
+    - pip install telethon==1.26.0 -t telegram-layer/python 
+    - pushd telegram-layer
+    - zip -r python.zip python -x "python/__pycache__/*" -x "python/*dist-info/*" >> telegram-layer.log && popd
+    - aws s3 cp telegram-layer/python.zip s3://$TF_VAR_aws_s3_bucket_name/lambda-layers/telegram-layer/
+    - pip install requests -t requests-layer/python
+    - pushd requests-layer
+    - zip -r python.zip python -x "/python/__pycache__/*" -x "python/*dist-info/*" >> requests-layer.log && popd
+    - aws s3 cp requests-layer/python.zip s3://$TF_VAR_aws_s3_bucket_name/lambda-layers/requests-layer/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "infrastructure" && $CI_PIPELINE_SOURCE == "push" #"merge_request_event"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - telegram-s3-lambda/*
+       - twitter-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - telegram-s3-lambda/*
+       - twitter-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+      variables:
+        CI_ENVIRONMENT_NAME: "prod"
+      changes: 
+       - telegram-s3-lambda/*
+       - twitter-s3-lambda/*
+  when: manual
+
+# Teamplate for building terraform lambda.
+.telegram-build:
+  extends: .python-init
+  stage: app-build
+  script:
+    - pushd ${TELEGRAM_LAMBDA_PATH}
+    - zip -r telegram_s3_lambda.zip . -x "$./venv/*" -x "./.env" -x "./utils/__pycache__/*" -x "./requirements.txt" -x "./telegram_s3_lambda.log" > telegram_s3_lambda.log
+    - aws s3 cp telegram_s3_lambda.zip s3://$TF_VAR_aws_s3_bucket_name/lambda-functions/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "infrastructure" && $CI_PIPELINE_SOURCE == "push" #"merge_request_event"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - telegram-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - telegram-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+      variables:
+        CI_ENVIRONMENT_NAME: "prod"
+      changes: 
+       - telegram-s3-lambda/*
+      
+
+# Teamplate for building telegram lambda.
+.twitter-build:
+  extends: .python-init
+  stage: app-build
+  script:
+    - pushd ${TWITTER_LAMBDA_PATH}
+    - zip -r twitter_s3_lambda.zip . -x "$./venv/*" -x "./.env" -x "./utils/__pycache__/*" -x "./twitter_s3_lambda.log" > twitter_s3_lambda.log
+    - aws s3 cp twitter_s3_lambda.zip s3://$TF_VAR_aws_s3_bucket_name/lambda-functions/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "infrastructure" && $CI_PIPELINE_SOURCE == "push" #"merge_request_event"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - twitter-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - twitter-s3-lambda/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+      variables:
+        CI_ENVIRONMENT_NAME: "prod"
+      changes: 
+       - twitter-s3-lambda/*
+
+.dbt-build:
+ extends: .docker-init
+ stage: app-build
+ script:
+   - cd ${DBT_PATH}
+   - docker build . -t ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/sh-${CI_ENVIRONMENT_NAME}-dbt-repo:latest
+   - aws ecr get-login-password --region ${AWS_DEFAULT_REGION}| docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+   - docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/sh-${CI_ENVIRONMENT_NAME}-dbt-repo:latest
+ rules:
+    - if: $CI_COMMIT_BRANCH == "infrastructure" && $CI_PIPELINE_SOURCE == "push" #"merge_request_event"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - dbt/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"
+      variables:
+        CI_ENVIRONMENT_NAME: "dev"
+      changes: 
+       - dbt/*
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+      variables:
+        CI_ENVIRONMENT_NAME: "prod"
+      changes: 
+       - dbt/*
+
+# Teamplate for terraform plan
+.terraform-plan:
+  extends: .terraform-init
+  stage: terraform-plan
+  script:
+    - cd "${TF_ROOT}"
+    - terraform plan -input=false -out="${TF_PLAN_CACHE}"
+  artifacts:
+    paths:
+      - ${TF_ROOT}/${TF_PLAN_CACHE}
+
+# Teamplate for terraform deploy
+.terraform-deploy:
+  extends: .terraform-init
+  stage: terraform-deploy
+  script:
+    - cd "${TF_ROOT}"
+    - terraform apply -input=false "${TF_PLAN_CACHE}"
+  when: manual
+
+
+# Teamplate for terraform destroy
+.terraform-destroy:
+  extends: .terraform-init
+  stage: cleanup and redeploy
+  script:
+    - cd "${TF_ROOT}"
+    - terraform destroy -auto-approve
+  when: manual
+
+# Teamplate for terraform destroy
+.terraform-redeploy:
+  extends: .terraform-init
+  stage: cleanup and redeploy
+  script:
+    - cd "${TF_ROOT}"
+    - terraform apply -input=false "${TF_PLAN_CACHE}"
+  when: manual

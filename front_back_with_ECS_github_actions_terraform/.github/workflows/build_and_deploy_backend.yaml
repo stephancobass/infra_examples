@@ -1,0 +1,122 @@
+name: Build and deploy backend
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+    id-token: write   # This is required for requesting the JWT
+    contents: read    # This is required for actions/checkout
+
+
+jobs:
+  build_and_deploy_backend_stage:
+    if: github.ref_name == 'develop'
+    name: build_and_deploy_backend_stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentialsbuild_dockerfile
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build_api_docker_image
+        id: Build_api_docker_image
+        run: |
+            docker build -f ci/Dockerfile -t ${{ vars.ECR_API_REPOSITORY_STAGE }}:${{ github.sha }} --build-arg BACKEND_TYPE=api .
+
+      - name: Push_api_image_to_the_ECR
+        id: Push_api_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_API_REPOSITORY_STAGE }}:${{ github.sha }}
+
+      - name: Build_worker_docker_image
+        id: Build_worker_docker_image
+        run: |
+            docker build -f ci/Dockerfile -t ${{ vars.ECR_WORKER_REPOSITORY_STAGE }}:${{ github.sha }} --build-arg BACKEND_TYPE=worker .
+            docker logout
+
+      - name: Push_worker_image_to_the_ECR
+        id: Push_worker_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_WORKER_REPOSITORY_STAGE }}:${{ github.sha }}
+
+      - name: Register_task_definition_and_update_ecs_service_api
+        id: Register_task_definition_and_update_ecs_service_api
+        run: |
+          aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+          --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_API_REPOSITORY_STAGE }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_api_stage.json)"
+          aws ecs update-service --cluster stage-app --service stage-app-api --task-definition stage-app-api --force-new-deployment
+          aws ecs wait services-stable --cluster stage-app --services stage-app-api
+
+      - name: Register_task_definition_and_update_ecs_service_worker
+        id: Register_task_definition_and_update_ecs_service_worker
+        run: |
+          aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+          --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_WORKER_REPOSITORY_STAGE }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_worker_stage.json)"
+          aws ecs update-service --cluster stage-app --service stage-app-worker --task-definition stage-app-worker --force-new-deployment
+          #aws ecs wait services-stable --cluster stage-app --services stage-app-worker
+
+  build_and_deploy_backend_prod:
+    if: github.ref_name == 'main'
+    name: build_and_deploy_backend_prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build_api_docker_image
+        id: Build_api_docker_image
+        run: |
+            docker build -f ci/Dockerfile -t ${{ vars.ECR_API_REPOSITORY_PROD }}:${{ github.sha }} --build-arg BACKEND_TYPE=api .
+
+      - name: Push_api_image_to_the_ECR
+        id: Push_api_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_API_REPOSITORY_PROD }}:${{ github.sha }}
+
+      - name: Build_worker_docker_image
+        id: Build_worker_docker_image
+        run: |
+            docker build -f ci/Dockerfile -t ${{ vars.ECR_WORKER_REPOSITORY_PROD }}:${{ github.sha }} --build-arg BACKEND_TYPE=worker .
+            docker logout
+
+      - name: Push_worker_image_to_the_ECR
+        id: Push_worker_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_WORKER_REPOSITORY_PROD }}:${{ github.sha }}
+
+      - name: Register_task_definition_and_update_ecs_service_api
+        id: Register_task_definition_and_update_ecs_service_api
+        run: |
+          aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+          --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_API_REPOSITORY_PROD }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_api_prod.json)"
+          aws ecs update-service --cluster prod-app --service prod-app-api --task-definition prod-app-api --force-new-deployment
+          aws ecs wait services-stable --cluster prod-app --services prod-app-api
+
+      - name: Register_task_definition_and_update_ecs_service_worker
+        id: Register_task_definition_and_update_ecs_service_worker
+        run: |
+          aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+          --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_WORKER_REPOSITORY_PROD }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_worker_prod.json)"
+          aws ecs update-service --cluster prod-app --service prod-app-worker --task-definition prod-app-worker --force-new-deployment
+          #aws ecs wait services-stable --cluster prod-app --services prod-app-worker

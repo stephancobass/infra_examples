@@ -1,0 +1,26 @@
+- hosts: all
+  gather_facts: false
+     
+  roles:
+    - { role: app_deploy }
+    
+  environment:
+    ENVIRONMENT: "{{ lookup('ansible.builtin.env', 'ENVIRONMENT') }}"
+    DB_NAME: "{{ lookup('ansible.builtin.env', 'DB_NAME') }}"
+    DB_USER: "{{ lookup('ansible.builtin.env', 'DB_USER') }}"
+    DB_PASSWORD: "{{ lookup('ansible.builtin.env', 'DB_PASSWORD') }}"
+    DB_HOST: "{{ lookup('ansible.builtin.env', 'DB_HOST') }}"
+    DB_PORT: "{{ lookup('ansible.builtin.env', 'DB_PORT') }}"
+    ACCESS_TOKEN_SECRET: "{{ lookup('ansible.builtin.env', 'ACCESS_TOKEN_SECRET') }}"
+    REFRESH_TOKEN_SECRET: "{{ lookup('ansible.builtin.env', 'REFRESH_TOKEN_SECRET') }}"
+    ACCESS_TOKEN_EXPIRE_MINUTES: "{{ lookup('ansible.builtin.env', 'ACCESS_TOKEN_EXPIRE_MINUTES') }}"
+    REFRESH_TOKEN_EXPIRE_HOURS: "{{ lookup('ansible.builtin.env', 'REFRESH_TOKEN_EXPIRE_HOURS') }}"
+    RESET_TOKEN_EXPIRE_MINUTES: "{{ lookup('ansible.builtin.env', 'RESET_TOKEN_EXPIRE_MINUTES') }}"
+    JWT_ALGORITHM: "{{ lookup('ansible.builtin.env', 'JWT_ALGORITHM') }}"
+    SENTRY_DSN: "{{ lookup('ansible.builtin.env', 'SENTRY_DSN') }}"
+    REDIS_HOST: "{{ lookup('ansible.builtin.env', 'REDIS_HOST') }}"
+    AWS_ACCOUNT_ID: "{{ lookup('ansible.builtin.env', 'AWS_ACCOUNT_ID') }}"
+    AWS_DEFAULT_REGION: "{{ lookup('ansible.builtin.env', 'AWS_DEFAULT_REGION') }}"
+    NAME_ECR_REPO_DEV_FRONTEND: "{{ lookup('ansible.builtin.env', 'NAME_ECR_REPO_DEV_FRONTEND') }}"
+    NAME_ECR_REPO_DEV_BACKEND: "{{ lookup('ansible.builtin.env', 'NAME_ECR_REPO_DEV_BACKEND') }}"
+    REDIS_PORT: "{{ lookup('ansible.builtin.env', 'REDIS_PORT') }}"

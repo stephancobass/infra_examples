@@ -1,0 +1,101 @@
+name: Build and deploy frontend
+on:
+  push: 
+    branches:
+      - main
+      - develop
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout  
+
+jobs:
+  build_and_deploy_frontend_stage:
+    if: github.ref_name == 'develop'
+    name: build_and_deploy_frontend_stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+      
+     
+      - name: Build_frontend_docker_image
+        id: Build_frontend_docker_image
+        run: |
+          docker build -f ci/Dockerfile \
+          --build-arg REACT_APP_API_FETCH_INTERVAL=${{ vars.REACT_APP_API_FETCH_INTERVAL_STAGE }} \
+          --build-arg REACT_APP_AUTH0_AUDIENCE=${{ vars.REACT_APP_AUTH0_AUDIENCE_STAGE }} \
+          --build-arg REACT_APP_AUTH0_CLIENT_ID=${{ vars.REACT_APP_AUTH0_CLIENT_ID_STAGE }} \
+          --build-arg REACT_APP_AUTH0_DOMAIN=${{ vars.REACT_APP_AUTH0_DOMAIN_STAGE }} \
+          --build-arg REACT_APP_BE_API_KEY=${{ vars.REACT_APP_BE_API_KEY_STAGE }} \
+          --build-arg REACT_APP_BE_API_URL=${{ vars.REACT_APP_BE_API_URL_STAGE }} \
+          --build-arg BASIC_AUTH=${{ vars.BASIC_AUTH_STAGE }} \
+          -t ${{ vars.ECR_FRONTEND_REPOSITORY_STAGE }}:${{ github.sha }} .
+
+      - name: Push_image_to_the_ECR
+        id: Push_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_FRONTEND_REPOSITORY_STAGE }}:${{ github.sha }}
+            docker logout
+
+      - name: Register_task_definition_and_update_ecs_service
+        id: Register_task_definition_and_update_ecs_service
+        run: |
+            aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+            --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_FRONTEND_REPOSITORY_STAGE }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_frontend_stage.json)"
+            aws ecs update-service --cluster stage-app --service stage-app-frontend --task-definition stage-app-frontend --force-new-deployment
+            aws ecs wait services-stable --cluster stage-app --services stage-app-frontend
+    
+  build_and_deploy_frontend_prod:
+    if: github.ref_name == 'main'
+    name: build_and_deploy_frontend_prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build_frontend_docker_image
+        id: Build_frontend_docker_image
+        run: |
+            docker build -f ci/Dockerfile \
+            --build-arg REACT_APP_API_FETCH_INTERVAL=${{ vars.REACT_APP_API_FETCH_INTERVAL_PROD }} \
+            --build-arg REACT_APP_AUTH0_AUDIENCE=${{ vars.REACT_APP_AUTH0_AUDIENCE_PROD }} \
+            --build-arg REACT_APP_AUTH0_CLIENT_ID=${{ vars.REACT_APP_AUTH0_CLIENT_ID_PROD }} \
+            --build-arg REACT_APP_AUTH0_DOMAIN=${{ vars.REACT_APP_AUTH0_DOMAIN_PROD }} \
+            --build-arg REACT_APP_BE_API_KEY=${{ vars.REACT_APP_BE_API_KEY_PROD }} \
+            --build-arg REACT_APP_BE_API_URL=${{ vars.REACT_APP_BE_API_URL_PROD }} \
+            --build-arg BASIC_AUTH=${{ vars.BASIC_AUTH_PROD }} \
+            -t ${{ vars.ECR_FRONTEND_REPOSITORY_PROD }}:${{ github.sha }} .
+
+      - name: Push_image_to_the_ECR
+        id: Push_image_to_the_ECR
+        run: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+            docker push ${{ vars.ECR_FRONTEND_REPOSITORY_PROD }}:${{ github.sha }}
+            docker logout
+      
+      - name: Register_task_definition_and_update_ecs_service
+        id: Register_task_definition_and_update_ecs_service
+        run: |
+          aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+          --cli-input-json "$(jq --arg IMAGE "${{ vars.ECR_FRONTEND_REPOSITORY_PROD }}:${{ github.sha }}" '.containerDefinitions[0].image = $IMAGE' ci/td_frontend_prod.json)"
+          aws ecs update-service --cluster prod-app --service prod-app-frontend --task-definition prod-app-frontend --force-new-deployment
+          aws ecs wait services-stable --cluster prod-app --services prod-app-frontend
+            

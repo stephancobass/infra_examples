@@ -1,0 +1,79 @@
+{
+    "family": "prod-app-api",
+    "containerDefinitions": [
+        {
+            "name": "prod-app-api",
+            "image": "",
+            "cpu": 0,
+            "memoryReservation": 1024,
+            "portMappings": [
+                {
+                    "containerPort": 3001,
+                    "hostPort": 3001,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "mountPoints": [],
+            "volumesFrom": [],
+            "environment": [
+                {
+                    "name": "NODE_ENV",
+                    "value": "production"
+                },
+                {
+                    "name": "LISTEN_PORT",
+                    "value": "3001"
+                },
+                {
+                    "name": "LISTEN_ADDRESS",
+                    "value": "0.0.0.0"
+                }
+            ],
+            "secrets": [
+                {
+                    "name": "FE_APP_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/prod/app/FE_APP_URL"
+                },
+                {
+                    "name": "FE_APP_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/prod/app/FE_APP_API_KEY"
+                },
+                {
+                    "name": "BULL_UI_BASIC_AUTH_USERNAME",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/prod/app/BULL_UI_BASIC_AUTH_USERNAME"
+                },
+                {
+                    "name": "BULL_UI_BASIC_AUTH_PASSWORD",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/prod/app/BULL_UI_BASIC_AUTH_PASSWORD"
+                },
+                {
+                    "name": "REDIS_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/prod/app/REDIS_URL"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/prod/app/api",
+                    "awslogs-region": "us-east-2",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "taskRoleArn": "arn:aws:iam::123456789012:role/prod-app-ecs",
+    "executionRoleArn": "arn:aws:iam::123456789012:role/prod-app-ecs",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "2048",
+    "tags": [
+        {
+            "key": "Application",
+            "value": "Command Center"
+        }
+    ]
+}

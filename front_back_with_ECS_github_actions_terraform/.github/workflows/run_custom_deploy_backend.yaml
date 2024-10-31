@@ -1,0 +1,47 @@
+name: Run custom deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "AWS Region"
+        required: true
+        default: "us-east-2"
+      full_sha_commit:
+        description: "Full SHA of commit"
+        required: true
+        default: enter_full_sha_of_commit
+      env_name:
+        description: "Environment name - 'stage' or 'prod'"
+        type: choice
+        options:
+          - stage
+          - prod
+
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout  
+
+jobs:
+  run_custom_deploy_backend:
+    name: run_custom_deploy_backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Register_task_definition_and_update_ecs_service
+        id: Register_task_definition_and_update_ecs_service
+        run: |
+            aws ecs register-task-definition --region ${{ vars.AWS_REGION }} \
+            --cli-input-json "$(jq --arg IMAGE "${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ github.event.inputs.env_name }}-app-backend:${{ github.event.inputs.full_sha_commit }}" '.containerDefinitions[0].image = $IMAGE' ci/td_backend_${{ github.event.inputs.env_name }}.json)"
+            aws ecs update-service --cluster ${{ github.event.inputs.env_name }} --service ${{ github.event.inputs.env_name }}-app-backend --task-definition ${{ github.event.inputs.env_name }}-app-backend --force-new-deployment
+            aws ecs wait services-stable --cluster ${{ github.event.inputs.env_name }}-app --services ${{ github.event.inputs.env_name }}-app-backend 

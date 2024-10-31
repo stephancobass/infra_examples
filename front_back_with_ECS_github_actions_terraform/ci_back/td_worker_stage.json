@@ -1,0 +1,74 @@
+{
+    "family": "stage-app-worker",
+    "containerDefinitions": [
+        {
+            "name": "stage-app-worker",
+            "image": "",
+            "cpu": 0,
+            "memoryReservation": 1024,
+            "portMappings": [
+            ],
+            "essential": true,
+            "mountPoints": [],
+            "volumesFrom": [],
+            "environment": [
+                {
+                    "name": "NODE_ENV",
+                    "value": "production"
+                }
+            ],
+            "secrets": [
+                {
+                    "name": "FE_APP_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/FE_APP_URL"
+                },
+                {
+                    "name": "FE_APP_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/FE_APP_API_KEY"
+                },
+                {
+                    "name": "MAO_API_BASE_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/MAO_API_BASE_URL"
+                },
+                {
+                    "name": "MAO_API_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/MAO_API_API_KEY"
+                },
+                {
+                    "name": "OCS_API_BASE_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/OCS_API_BASE_URL"
+                },
+                {
+                    "name": "OCS_API_API_KEY",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012:parameter/stage/app/OCS_API_API_KEY"
+                },
+                {
+                    "name": "REDIS_URL",
+                    "valueFrom": "arn:aws:ssm:us-east-2:123456789012s:parameter/stage/app/REDIS_URL"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/stage/app/worker",
+                    "awslogs-region": "us-east-2",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "taskRoleArn": "arn:aws:iam::123456789012:role/stage-app-ecs",
+    "executionRoleArn": "arn:aws:iam::123456789012:role/stage-app-ecs",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "2048",
+    "tags": [
+        {
+            "key": "Application",
+            "value": "Command Center"
+        }
+    ]
+}

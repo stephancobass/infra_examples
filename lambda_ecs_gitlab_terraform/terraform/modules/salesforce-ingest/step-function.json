@@ -1,0 +1,80 @@
+{
+    "Comment": "Ingestion fron Salesforce",
+    "StartAt": "GetEntityList",
+    "States": {
+        "GetEntityList": {
+            "Type": "Task",
+            "Parameters": {
+                "Bucket": "snowflake-house",
+                "Key": "${tf_key}"
+            },
+            "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+            "ResultSelector": {
+                "entities.$": "States.StringToJson($.Body)"
+            },
+            "TimeoutSeconds": 30,
+            "Next": "invoker"
+        },
+        "invoker": {
+            "Type": "Map",
+            "InputPath": "$.entities",
+            "ItemsPath": "$.items",
+            "ItemProcessor": {
+                "ProcessorConfig": {
+                    "Mode": "INLINE"
+                },
+                "StartAt": "Salesforce-Lambda",
+                "States": {
+                    "Salesforce-Lambda": {
+                        "Type": "Task",
+                        "Resource": "${tf_lambda}:$LATEST",
+                        "TimeoutSeconds": 160,
+                        "Parameters": {
+                            "executionId.$": "$$.Execution.Id",
+                            "input.$": "$"
+                          },
+                        "Retry": [
+                            {
+                              "ErrorEquals": [
+                                "TimeOut", "Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"
+                              ],
+                              "IntervalSeconds": 1,
+                              "BackoffRate": 2,
+                              "MaxAttempts": 0
+                            }
+                          ],
+                        "Catch": [
+                            {
+                                "ErrorEquals": ["States.ALL"],
+                                "Next": "SNS-notify"
+                            }
+                        ],
+                        "Next": "LambdaSucceeded"
+                    },
+
+                    "LambdaSucceeded": {
+                        "Type": "Pass",
+                        "Result": {
+                            "success": true
+                        },
+                        "End": true
+                    },
+
+                    "SNS-notify": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::sns:publish",
+                        "Parameters": {
+                            "TopicArn": "${tf_topic}",
+                            "Message": {
+                                "Response.$": "$",
+                                "executionId.$": "$$.Execution.Id"
+                            }
+                        },
+                        "End": true
+                    }
+                }
+            },
+            "End": true
+        }
+    }
+}

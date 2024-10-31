@@ -1,0 +1,74 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateInstanceProfile",
+                "iam:UpdateAssumeRolePolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListRoleTags",
+                "iam:GenerateServiceLastAccessedDetails",
+                "iam:ListPoliciesGrantingServiceAccess",
+                "iam:UpdateOpenIDConnectProviderThumbprint",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:DeletePolicy",
+                "iam:CreateRole",
+                "iam:AttachRolePolicy",
+                "iam:ListInstanceProfileTags",
+                "iam:PutRolePolicy",
+                "iam:AddRoleToInstanceProfile",
+                "iam:GetContextKeysForPrincipalPolicy",
+                "iam:GetServiceLinkedRoleDeletionStatus",
+                "iam:PassRole",
+                "iam:DetachRolePolicy",
+                "iam:SimulatePrincipalPolicy",
+                "iam:DeleteRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListPolicyTags",
+                "iam:ListRolePolicies",
+                "iam:CreatePolicyVersion",
+                "iam:DeleteOpenIDConnectProvider",
+                "iam:DeleteInstanceProfile",
+                "iam:GetRole",
+                "iam:GetInstanceProfile",
+                "iam:GetPolicy",
+                "iam:RemoveClientIDFromOpenIDConnectProvider",
+                "iam:DeleteRole",
+                "iam:UpdateRoleDescription",
+                "iam:CreateOpenIDConnectProvider",
+                "iam:CreatePolicy",
+                "iam:CreateServiceLinkedRole",
+                "iam:ListPolicyVersions",
+                "iam:UpdateRole",
+                "iam:DeleteServiceLinkedRole",
+                "iam:GetOpenIDConnectProvider",
+                "iam:AddClientIDToOpenIDConnectProvider",
+                "iam:GetRolePolicy",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion",
+                "iam:TagRole",
+                "iam:UntagRole",
+                "iam:ListInstanceProfilesForRole",
+                "iam:TagInstanceProfile"
+            ],
+            "Resource": [
+                "arn:aws:iam::637423276627:oidc-provider/*",
+                "arn:aws:iam::637423276627:instance-profile/*",
+                "arn:aws:iam::637423276627:role/*",
+                "arn:aws:iam::637423276627:policy/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:*",
+                "logs:*",
+                "dynamodb:*",
+                "ecr:*",
+                "ec2:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

@@ -1,0 +1,2 @@
+AWS_DEFAULT_REGION: "{{ lookup('ansible.builtin.env', 'AWS_DEFAULT_REGION') }}"
+AWS_ACCOUNT_ID: "{{ lookup('ansible.builtin.env', 'AWS_ACCOUNT_ID') }}"

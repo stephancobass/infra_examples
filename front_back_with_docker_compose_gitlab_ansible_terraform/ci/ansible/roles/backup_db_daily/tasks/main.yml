@@ -1,0 +1,15 @@
+---
+- name: Ping remote host
+  ansible.builtin.ping:
+
+- name: Starting perform the backup of db
+  shell:
+    cmd: docker exec "database" pg_dumpall -c -U {{ DB_USER }} | gzip --best > "./db_backups/daily/db_dump_$(date "+%d-%m-%Y_%H-%M-%S").sql.gz"
+  
+- name: Deleting older than 10 days backup files
+  shell:
+    cmd: find "./db_backups/daily/" -type f -mtime +10 -delete
+
+- name: Sync backup directory with S3 bucket
+  shell:
+    cmd: aws s3 sync "./db_backups/daily/" s3://{{ S3_BACKUP_BUCKET }}/{{ BACKUP_TYPE }} --delete

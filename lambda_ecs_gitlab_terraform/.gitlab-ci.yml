@@ -1,0 +1,68 @@
+include: terraform/Terraform.gitlab-ci.yml
+
+stages:
+  - apps-build
+  - terraform-plan
+  - terraform-deploy
+  - cleanup and redeploy
+
+# Manual job for rebuild layers for lambdas
+layers-build:
+  extends: .layers-build
+  stage: apps-build
+  when: manual
+
+# Telegram build and upload lambda to S3 bucket
+telegram-build:
+  extends: .telegram-build
+  stage: apps-build
+
+# Twitter build and upload lambda to S3 bucket
+twitter-build:
+  extends: .twitter-build
+  stage: apps-build
+
+# dbt build and upload push image to ECR repository
+dbt-build:
+  extends: .dbt-build
+  stage: apps-build
+
+#salesforce-build:
+# extends: .python-init
+# script
+#   - somethinng
+# rules:
+#    - if: $CI_PIPELINE_SOURCE == "push"
+#      changes:
+#      - dbt/*
+
+terraform-plan:
+  extends: .terraform-plan
+  stage: terraform-plan
+  environment:
+    name: $CI_ENVIRONMENT_NAME
+  dependencies:
+    - telegram-build
+    - twitter-build
+    - dbt-build
+    - layers-build
+
+terraform-deploy:
+  extends: .terraform-deploy
+  stage: terraform-deploy
+  environment:
+    name: $CI_ENVIRONMENT_NAME
+  dependencies:
+    - terraform-plan
+    
+terraform-destroy:
+  extends: .terraform-destroy
+  stage: cleanup and redeploy
+  environment:
+    name: $CI_ENVIRONMENT_NAME
+
+terraform-full-redeploy:
+  extends: .terraform-redeploy
+  stage: cleanup and redeploy
+  environment:
+    name: $CI_ENVIRONMENT_NAME

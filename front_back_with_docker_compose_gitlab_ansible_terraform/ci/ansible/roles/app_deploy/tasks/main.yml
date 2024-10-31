@@ -1,0 +1,51 @@
+---
+- name: Ping remote host
+  ansible.builtin.ping:
+
+- name: Upload docker-compose
+  copy:
+    src: ../docker-compose.yml
+    dest: "{{ docker_compose_dir }}"
+    owner: "{{  ansible_user }}"
+    group: "{{  ansible_user }}"
+    mode: 0644
+  
+- name: Upload .env_app
+  copy:
+    src: ../.env_app
+    dest: "{{ docker_compose_dir }}" 
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Upload .env_db
+  copy:
+    src: ../.env_db
+    dest: "{{ docker_compose_dir }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Upload nginx.conf
+  copy:
+    src: ../nginx.conf
+    dest: "{{ docker_compose_dir }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+
+- name: Docker login
+  shell:
+    cmd: aws ecr get-login-password --region {{ AWS_DEFAULT_REGION }} | docker login --username AWS --password-stdin {{ AWS_ACCOUNT_ID }}.dkr.ecr.{{ AWS_DEFAULT_REGION }}.amazonaws.com
+
+- name: Pull new docker images
+  shell:
+    cmd: cd {{ docker_compose_dir }}; docker compose pull
+
+- name: Update app
+  shell:
+    cmd: cd {{ docker_compose_dir }}; docker compose down; docker compose up -d --force-recreate
+
+- name: Cleanup docker
+  command: docker system prune -af
+  ignore_errors: false

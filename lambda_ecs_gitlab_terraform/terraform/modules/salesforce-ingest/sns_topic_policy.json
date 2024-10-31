@@ -1,0 +1,12 @@
+{
+    "Id": "SalesforcePolicy",
+    "Version": "2012-10-17",
+
+    "Statement": [{
+      "Sid": "grant-publish",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": ["sns:Publish"],
+      "Resource": "${tf_topic}"
+    }]
+}

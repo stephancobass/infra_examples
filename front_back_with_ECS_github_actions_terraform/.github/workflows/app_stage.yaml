@@ -1,0 +1,60 @@
+name: Terraform APP stage
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "AWS Region"
+        required: true
+        default: "us-east-2"
+      app_name:
+        description: "App name"
+        required: true
+        default: app
+      env_name:
+        description: "Environment name"
+        required: true
+        default: stage
+    
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  tf_plan_and_deploy:
+    name: tf_plan_and_deploy
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Terraform setup
+        uses: hashicorp/setup-terraform@v3
+      
+      - name: Configure AWS credentials
+        id: set_aws_creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.OIDC_GITHUB_ACTION_ROLE }}
+          aws-region: ${{ github.event.inputs.region }}
+         
+      - name: Run tf plan and apply
+        id: Run_tf_plan_and_apply
+        run: |
+            cd terraform/app
+            terraform init -input=false
+            terraform workspace new "${{ github.event.inputs.env_name }}-${{ github.event.inputs.app_name }}-app" || true
+            terraform workspace select "${{ github.event.inputs.env_name }}-${{ github.event.inputs.app_name }}-app"
+            terraform validate
+            terraform plan -var-file=stage.tfvars -out tfplan -input=false
+            terraform apply "tfplan"
+
+      
+
+          
+
+
+
+        
